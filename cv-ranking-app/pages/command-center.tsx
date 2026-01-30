@@ -719,6 +719,7 @@ export default function Home() {
 
 // Subcomponents
 function CandidateCard({ candidate, rank }: { candidate: RankedCandidate, rank: number }) {
+  const { t } = useLanguage();
   const isTop3 = rank <= 3;
   
   return (
