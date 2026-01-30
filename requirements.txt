@@ -1,0 +1,7 @@
+﻿# CV Ranking System - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+pillow>=10.0.0
+pytesseract>=0.3.10
+ollama>=0.1.0
+pymupdf>=1.23.0
