@@ -77,3 +77,6 @@ image*.png
 image*.jpg
 cv*.png
 cv*.jpg
+
+# Documentation (local only)
+README.md
