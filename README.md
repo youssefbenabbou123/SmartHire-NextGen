@@ -252,9 +252,9 @@ MongoDB connection failed
 ## License
 
 This project was created for Capgemini By:
-Youssef Benabbou
-Yassir Houari
-Ghita Ibrahimi
-Nadia Outaleb
+- Youssef Benabbou
+- Yassir Houari
+- Ghita Ibrahimi
+- Nadia Outaleb
 
 
