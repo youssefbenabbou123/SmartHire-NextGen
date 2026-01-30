@@ -69,7 +69,7 @@ Download from [mongodb.com](https://www.mongodb.com/try/download/community) or u
 
 ### Step 1: Clone the Repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/youssefbenabbou123/SmartHire-NextGen.git
 cd Capgemini
 ```
 
