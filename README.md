@@ -1,6 +1,6 @@
 # CV Ranking System
 
-An AI-powered CV parsing and candidate ranking system built with Python and Next.js. Uses local Mistral AI (via Ollama) for intelligent CV parsing and a structured scoring algorithm for candidate ranking.
+An AI-powered CV parsing and candidate ranking system built with Python and Next.js. with intelligent CV parsing and a structured scoring algorithm for candidate ranking.
 
 ## Video Demo 
 
