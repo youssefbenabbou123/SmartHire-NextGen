@@ -2,6 +2,11 @@
 
 An AI-powered CV parsing and candidate ranking system built with Python and Next.js. Uses local Mistral AI (via Ollama) for intelligent CV parsing and a structured scoring algorithm for candidate ranking.
 
+## Video Demo 
+
+on a utilisé drive parce que GitHub limite la taille des fichiers à 25 MB par vidéo et notre video est 600mo :( 
+https://drive.google.com/file/d/1mMjT2lLqR2NyaKT4EeyLdHJ2lbEJCLZv/view?usp=sharing
+
 ## Features
 
 - **AI-Powered CV Parsing**: Extract structured data from CV images/PDFs using Mistral AI
