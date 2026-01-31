@@ -238,7 +238,21 @@ export default function Home() {
 
   const loadSelectedCVs = () => {
     const selected = dbCVs.filter(cv => selectedCVs.has(cv.candidate_name));
-    setCandidates(prev => [...prev, ...selected]);
+    
+    // Get names of selected CVs (to replace existing ones, not duplicate)
+    const selectedNames = new Set(selected.map(cv => 
+      (cv.candidate_name || cv.personal_info?.full_name || '').toLowerCase().trim()
+    ));
+    
+    // Remove existing candidates with same name, then add fresh ones from DB
+    setCandidates(prev => {
+      const filtered = prev.filter(cv => {
+        const name = (cv.candidate_name || cv.personal_info?.full_name || '').toLowerCase().trim();
+        return !selectedNames.has(name);
+      });
+      return [...filtered, ...selected];
+    });
+    
     setShowDBModal(false);
     setSelectedCVs(new Set());
   };
@@ -252,6 +266,10 @@ export default function Home() {
     setError(null);
 
     try {
+      // Load scoring config from localStorage (set in methodology page)
+      const savedScoringConfig = localStorage.getItem('scoringConfig');
+      const scoringConfig = savedScoringConfig ? JSON.parse(savedScoringConfig) : undefined;
+      
       const response = await fetch('/api/rank-js', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,9 +277,16 @@ export default function Home() {
           candidates,
           jobRequirements: {
             role: jobRole,
-            required_skills: requiredSkills ? requiredSkills.split(',').map(s => s.trim()) : undefined,
+            required_skills: requiredSkills ? requiredSkills.split(',').map(s => 
+              s.trim()
+                .replace(/\s*\([^)]*\)\s*/g, '') // Remove (Nice to Have), (Required), etc.
+                .replace(/\s*-\s*nice to have\s*/gi, '')
+                .replace(/\s*-\s*required\s*/gi, '')
+                .trim()
+            ).filter(s => s.length > 0) : undefined,
             field: jobField
-          }
+          },
+          scoringConfig
         }),
       });
 
@@ -284,7 +309,13 @@ export default function Home() {
       }).catch(console.error);
 
       // Also save to ranking history
-      const searchSkills = requiredSkills ? requiredSkills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+      const searchSkills = requiredSkills ? requiredSkills.split(',').map((s: string) => 
+        s.trim()
+          .replace(/\s*\([^)]*\)\s*/g, '')
+          .replace(/\s*-\s*nice to have\s*/gi, '')
+          .replace(/\s*-\s*required\s*/gi, '')
+          .trim()
+      ).filter(Boolean) : [];
       const searchTitle = jobRole || (searchSkills.length > 0 ? `Skills: ${searchSkills.slice(0, 3).join(', ')}${searchSkills.length > 3 ? '...' : ''}` : 'General Search');
       
       fetch('/api/ranking-history', {
@@ -296,12 +327,12 @@ export default function Home() {
           weights: {},
           candidatesCount: ranked.length,
           rankedCandidates: ranked.slice(0, 10).map((c: any) => ({
-            name: c.candidate_name || c.name || 'Unknown Candidate',
+            name: c.name,
             score: c.total_score || c.score || 0,
             skills: c.skills_matched || []
           })),
           bestCandidate: ranked.length > 0 ? {
-            name: ranked[0].candidate_name || ranked[0].name || 'Unknown Candidate',
+            name: ranked[0].name,
             score: ranked[0].total_score || ranked[0].score || 0
           } : null
         })

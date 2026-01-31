@@ -188,43 +188,72 @@ function extractEmailInfo(
       });
     }
   } else {
-    // For explicit names, extract all mentioned candidates
-    for (const msg of recentMessages) {
-      if (msg.role === 'assistant') {
-        // Extract names from assistant responses (usually formatted as "**Name**" or "Name -")
-        const nameMatches = msg.content.match(/\*\*([^*]+)\*\*/g);
-        if (nameMatches) {
-          nameMatches.forEach(match => {
-            const name = match.replace(/\*\*/g, '').trim();
-            const nameLower = name.toLowerCase();
-            // Check if this name matches any candidate in the database
-            if (name && name.length > 2 && !name.match(/^(Top|Found|Candidate|Candidates|Match|Score|Hello)$/i) &&
-                allCandidateNames.some(cn => cn.includes(nameLower) || nameLower.includes(cn))) {
-              const fullName = candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.candidate_name || 
-                              candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.name ||
-                              name;
-              if (!candidateNames.some(n => n.toLowerCase() === fullName.toLowerCase())) {
-                candidateNames.push(fullName);
-              }
-            }
-          });
+    // FIRST: Check if a specific candidate name is mentioned in the current message
+    // Look for patterns like "email to [Name]", "send email to [Name]", "telling [Name]"
+    const nameInMessagePatterns = [
+      /(?:email|send|contact|message)\s+(?:to\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+      /(?:telling|ask|invite)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+      /to\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:telling|about|regarding)/i,
+    ];
+    
+    let foundSpecificName = false;
+    for (const pattern of nameInMessagePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        const extractedName = match[1].trim();
+        const extractedLower = extractedName.toLowerCase();
+        // Check if this matches a real candidate
+        const matchingCandidate = candidates.find(c => {
+          const cn = getCandidateName(c).toLowerCase();
+          return cn.includes(extractedLower) || extractedLower.includes(cn.split(' ')[0]);
+        });
+        if (matchingCandidate) {
+          candidateNames.push(getCandidateName(matchingCandidate));
+          foundSpecificName = true;
+          break;
         }
-        
-        // Also check for "Name -" pattern
-        const dashMatches = msg.content.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+-/g);
-        if (dashMatches) {
-          dashMatches.forEach(match => {
-            const name = match.replace(/\s+-.*/, '').trim();
-            const nameLower = name.toLowerCase();
-            if (allCandidateNames.some(cn => cn.includes(nameLower) || nameLower.includes(cn))) {
-              const fullName = candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.candidate_name ||
-                              candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.name ||
-                              name;
-              if (!candidateNames.some(n => n.toLowerCase() === fullName.toLowerCase())) {
-                candidateNames.push(fullName);
+      }
+    }
+    
+    // Only fall back to conversation history if no specific name was found in the message
+    if (!foundSpecificName) {
+      for (const msg of recentMessages) {
+        if (msg.role === 'assistant') {
+          // Extract names from assistant responses (usually formatted as "**Name**" or "Name -")
+          const nameMatches = msg.content.match(/\*\*([^*]+)\*\*/g);
+          if (nameMatches) {
+            nameMatches.forEach(match => {
+              const name = match.replace(/\*\*/g, '').trim();
+              const nameLower = name.toLowerCase();
+              // Check if this name matches any candidate in the database
+              if (name && name.length > 2 && !name.match(/^(Top|Found|Candidate|Candidates|Match|Score|Hello)$/i) &&
+                  allCandidateNames.some(cn => cn.includes(nameLower) || nameLower.includes(cn))) {
+                const fullName = candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.candidate_name || 
+                                candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.name ||
+                                name;
+                if (!candidateNames.some(n => n.toLowerCase() === fullName.toLowerCase())) {
+                  candidateNames.push(fullName);
+                }
               }
-            }
-          });
+            });
+          }
+        
+          // Also check for "Name -" pattern
+          const dashMatches = msg.content.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+-/g);
+          if (dashMatches) {
+            dashMatches.forEach(match => {
+              const name = match.replace(/\s+-.*/, '').trim();
+              const nameLower = name.toLowerCase();
+              if (allCandidateNames.some(cn => cn.includes(nameLower) || nameLower.includes(cn))) {
+                const fullName = candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.candidate_name ||
+                                candidates.find(c => getCandidateName(c).toLowerCase().includes(nameLower))?.name ||
+                                name;
+                if (!candidateNames.some(n => n.toLowerCase() === fullName.toLowerCase())) {
+                  candidateNames.push(fullName);
+                }
+              }
+            });
+          }
         }
       }
     }

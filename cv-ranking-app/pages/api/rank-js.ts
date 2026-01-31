@@ -607,77 +607,73 @@ function scoreEducation(education: any[], certifications: string[], jobField?: s
   let score = 0;
   const educationDetails: any[] = [];
 
-  // Degree relevance (5 pts) - only highest degree counts
-  if (education && education.length > 0) {
-    const highestDegree = education[0];
-    const degree = (highestDegree.degree || '').toLowerCase();
-    let degreeScore = 0;
-    
-    if (degree.includes('master')) {
-      degreeScore = 2.0;
-    } else if (degree.includes('bachelor') || degree.includes('licence')) {
-      degreeScore = 1.5;
-    } else {
-      degreeScore = 1.0;
-    }
+  // Helper: get text from education entry (handles string or object)
+  const getEduText = (edu: any): string => {
+    if (typeof edu === 'string') return edu.toLowerCase();
+    return (edu.degree || edu.institution || edu.field || '').toLowerCase();
+  };
 
+  // Scan ALL education entries to find best degree and institution
+  let bestDegreeScore = 0;
+  let bestInstitutionScore = 0;
+  
+  if (education && education.length > 0) {
+    // Check all entries for degree and institution keywords
+    education.forEach((edu) => {
+      const text = getEduText(edu);
+      
+      // Check for degree
+      let degScore = 0;
+      if (text.includes('master') || text.includes('mastère')) {
+        degScore = 2.0;
+      } else if (text.includes('bachelor') || text.includes('licence')) {
+        degScore = 1.5;
+      } else if (text.includes('baccalauréat') || text.includes('baccalaureat') || text.includes('bac')) {
+        degScore = 0.5;
+      }
+      if (degScore > bestDegreeScore) bestDegreeScore = degScore;
+      
+      // Check for institution
+      let instScore = 0;
+      if (text.includes('esisa') || text.includes('engineering') || 
+          text.includes('école') || text.includes('ecole') || 
+          text.includes('university') || text.includes('université')) {
+        instScore = 1.5;
+      }
+      if (instScore > bestInstitutionScore) bestInstitutionScore = instScore;
+    });
+
+    // If no degree found, give base score
+    if (bestDegreeScore === 0) bestDegreeScore = 1.0;
+
+    // Field relevance
     let fieldScore = 0;
     if (jobField) {
-      const field = (highestDegree.field || '').toLowerCase();
       const jobFieldLower = jobField.toLowerCase();
-      if (field.includes(jobFieldLower.split(' ')[0])) {
-        fieldScore = 3.0;
-      }
+      education.forEach((edu) => {
+        const text = getEduText(edu);
+        if (text.includes(jobFieldLower.split(' ')[0])) {
+          fieldScore = 3.0;
+        }
+      });
     }
 
-    score = Math.min(degreeScore + fieldScore, 5.0);
+    score = Math.min(bestDegreeScore + fieldScore, 5.0);
 
-    // Calculate points for each education entry
-    education.forEach((edu, idx) => {
-      const eduDegree = (edu.degree || '').toLowerCase();
-      let eduDegreeScore = 0;
+    // Build details for display
+    education.forEach((edu) => {
+      const text = getEduText(edu);
+      const isString = typeof edu === 'string';
       
-      if (eduDegree.includes('master')) {
-        eduDegreeScore = 2.0;
-      } else if (eduDegree.includes('bachelor') || eduDegree.includes('licence')) {
-        eduDegreeScore = 1.5;
-      } else if (eduDegree.includes('baccalauréat') || eduDegree.includes('baccalaureat') || eduDegree.includes('bac')) {
-        eduDegreeScore = 0.5;
-      } else {
-        eduDegreeScore = 1.0;
-      }
-
-      let eduFieldScore = 0;
-      if (jobField && idx === 0) { // Only highest degree gets field relevance
-        const field = (edu.field || '').toLowerCase();
-        const jobFieldLower = jobField.toLowerCase();
-        if (field.includes(jobFieldLower.split(' ')[0])) {
-          eduFieldScore = 3.0;
-        }
-      }
-
-      // Institution signal (only for highest degree)
-      let instScore = 0;
-      if (idx === 0) {
-        const institution = (edu.institution || '').toLowerCase();
-        if (institution.includes('engineering') || institution.includes('école') || institution.includes('university')) {
-          instScore = 1.5;
-        }
-      }
-
-      const totalEduScore = idx === 0 
-        ? Math.min(eduDegreeScore + eduFieldScore + instScore, 5.0 + 1.5) 
-        : 0; // Only highest degree contributes to score
-
       educationDetails.push({
-        degree: edu.degree || 'Unknown',
-        institution: edu.institution || '',
-        period: edu.period || '',
-        field: edu.field || '',
-        degreeScore: idx === 0 ? Math.round(eduDegreeScore * 100) / 100 : 0,
-        fieldScore: idx === 0 ? Math.round(eduFieldScore * 100) / 100 : 0,
-        institutionScore: idx === 0 ? Math.round(instScore * 100) / 100 : 0,
-        totalScore: Math.round(totalEduScore * 100) / 100,
+        degree: isString ? edu : (edu.degree || 'Unknown'),
+        institution: isString ? '' : (edu.institution || ''),
+        period: isString ? '' : (edu.period || ''),
+        field: isString ? '' : (edu.field || ''),
+        degreeScore: 0,
+        fieldScore: 0,
+        institutionScore: 0,
+        totalScore: 0,
       });
     });
   }
@@ -700,8 +696,8 @@ function scoreEducation(education: any[], certifications: string[], jobField?: s
     certScore = Math.min(certScore, 2.0);
   }
 
-  const institutionScore = education.length > 0 && educationDetails[0] ? educationDetails[0].institutionScore : 0;
-  const finalScore = Math.min(score + institutionScore + certScore, 10.0);
+  // Final: degree (up to 5) + institution (up to 1.5) + certs (up to 2) = max 8.5
+  const finalScore = Math.min(score + bestInstitutionScore + certScore, 10.0);
   
   return [
     Math.round(finalScore * 100) / 100, 
@@ -710,9 +706,9 @@ function scoreEducation(education: any[], certifications: string[], jobField?: s
       details: educationDetails,
       certifications: certDetails,
       certificationScore: Math.round(certScore * 100) / 100,
-      institutionScore: Math.round(institutionScore * 100) / 100,
-      degreeScore: education.length > 0 && educationDetails[0] ? educationDetails[0].degreeScore : 0,
-      fieldScore: education.length > 0 && educationDetails[0] ? educationDetails[0].fieldScore : 0,
+      institutionScore: Math.round(bestInstitutionScore * 100) / 100,
+      degreeScore: Math.round(bestDegreeScore * 100) / 100,
+      fieldScore: 0,
     }
   ];
 }
@@ -771,6 +767,20 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ error: 'Candidates array is required' });
     }
 
+    // Clean skill names (remove "(Nice to Have)", "(Required)", etc.)
+    const cleanSkill = (skill: string): string => {
+      return skill
+        .replace(/\s*\([^)]*\)\s*/g, '')  // Remove parenthetical text
+        .replace(/\s*-\s*nice to have\s*/gi, '')
+        .replace(/\s*-\s*required\s*/gi, '')
+        .trim();
+    };
+    
+    const cleanedJobRequirements = jobRequirements ? {
+      ...jobRequirements,
+      required_skills: jobRequirements.required_skills?.map(cleanSkill).filter((s: string) => s.length > 0)
+    } : undefined;
+
     // Default weights
     const weights = scoringConfig?.weights || {
       experience: 35,
@@ -781,11 +791,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     };
 
     const ranked = candidates.map((candidate) => {
+      const candidateName = candidate.candidate_name || candidate.personal_info?.full_name || 'Unknown';
       const experiences = candidate.experience || [];
       const projects = candidate.projects || [];
       const skills = candidate.skills || {};
       const education = candidate.education || [];
       const certifications = candidate.certifications || [];
+
+      // Debug logging
+      console.log(`[rank-js] Processing: ${candidateName}`);
+      console.log(`[rank-js]   Education entries: ${education.length}`, education.map((e: any) => e.degree || e.institution));
+      console.log(`[rank-js]   Certifications: ${certifications.length}`, certifications);
 
       const expTechs: string[] = [];
       experiences.forEach((exp: any) => {
@@ -794,12 +810,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
       const [expScore, expExp] = scoreExperience(
         experiences,
-        jobRequirements?.role,
-        jobRequirements?.required_skills
+        cleanedJobRequirements?.role,
+        cleanedJobRequirements?.required_skills
       );
-      const [techScore, techExp] = scoreTechnicalSkills(skills, jobRequirements?.required_skills, expTechs);
-      const [projScore, projExp] = scoreProjects(projects, experiences, jobRequirements?.required_skills);
-      const [eduScore, eduExp] = scoreEducation(education, certifications, jobRequirements?.field);
+      const [techScore, techExp] = scoreTechnicalSkills(skills, cleanedJobRequirements?.required_skills, expTechs);
+      const [projScore, projExp] = scoreProjects(projects, experiences, cleanedJobRequirements?.required_skills);
+      const [eduScore, eduExp] = scoreEducation(education, certifications, cleanedJobRequirements?.field);
       const [signalScore, signalExp] = scoreSignal(experiences, projects, skills);
 
       // Apply custom weights (normalize scores to 0-1 first, then apply weights)
@@ -825,8 +841,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         }
       }
 
-      if (techScore >= 18 && jobRequirements?.required_skills) {
-        const skillStr = jobRequirements.required_skills.slice(0, 2).join('/');
+      if (techScore >= 18 && cleanedJobRequirements?.required_skills) {
+        const skillStr = cleanedJobRequirements.required_skills.slice(0, 2).join('/');
         explanationParts.push(`+ High ${skillStr} relevance`);
       }
 

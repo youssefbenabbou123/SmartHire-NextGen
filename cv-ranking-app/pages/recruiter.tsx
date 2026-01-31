@@ -92,7 +92,6 @@ export default function RecruiterPage() {
   const recognitionRef = useRef<any>(null);
   const interimTranscriptRef = useRef<string>('');
   const baseInputRef = useRef<string>('');
-  const currentChatIdRef = useRef<string | null>(null);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -264,75 +263,84 @@ export default function RecruiterPage() {
 
     loadCandidates();
 
-    // Load chats from MongoDB
-    const loadChatsFromDB = async () => {
+    const storedChats = localStorage.getItem('recruiterChats');
+    if (storedChats) {
       try {
-        const response = await fetch('/api/get-chats');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.sessions && data.sessions.length > 0) {
-            // Convert MongoDB sessions to Chat format
-            const loadedChats: Chat[] = [];
-            for (const session of data.sessions.slice(0, 10)) {
-              // Fetch full session details
-              const sessionResponse = await fetch(`/api/get-chats?sessionId=${session.id}`);
-              if (sessionResponse.ok) {
-                const sessionData = await sessionResponse.json();
-                const chat: Chat = {
-                  id: session.id,
-                  title: sessionData.session.messages?.[0]?.content?.substring(0, 50) || 'Chat',
-                  messages: (sessionData.session.messages || []).map((m: any) => ({
-                    id: m._id || Date.now().toString(),
-                    role: m.type === 'user' ? 'user' : 'assistant',
-                    content: m.content,
-                    timestamp: new Date(m.timestamp),
-                    candidates: m.results || [],
-                    usedMistral: true
-                  })),
-                  createdAt: new Date(session.created_at),
-                  updatedAt: new Date(session.updated_at)
-                };
-                loadedChats.push(chat);
-              }
-            }
-            if (loadedChats.length > 0) {
-              const firstChatId = loadedChats[0].id;
-              currentChatIdRef.current = firstChatId;
-              setChats(loadedChats);
-              setCurrentChatId(firstChatId);
-              setMessages(loadedChats[0].messages);
-              return;
-            }
-          }
+        const parsed = JSON.parse(storedChats);
+        if (parsed.length > 0) {
+          setChats(parsed);
+          setCurrentChatId(parsed[0].id);
+          setMessages(parsed[0].messages.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          })));
+        } else {
+          initializeNewChat();
         }
-        initializeNewChat();
       } catch (e) {
-        console.error('Failed to load chats from MongoDB:', e);
         initializeNewChat();
       }
-    };
-
-    loadChatsFromDB();
+    } else {
+      initializeNewChat();
+    }
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typingText]);
 
-  // Keep ref in sync with currentChatId
   useEffect(() => {
-    currentChatIdRef.current = currentChatId;
-  }, [currentChatId]);
+    if (chats.length > 0) {
+      localStorage.setItem('recruiterChats', JSON.stringify(chats));
+    }
+  }, [chats]);
 
+  const initializeNewChat = useCallback(() => {
+    const candidateCount = JSON.parse(localStorage.getItem('cvRankings') || '[]').length;
+    const welcomeMessage: Message = {
+      id: 'welcome',
+      role: 'assistant',
+      content: `# ${t('recruiter.welcomeTitle')}
 
-  // Chats are now saved to MongoDB via API calls (no localStorage)
+${t('recruiter.welcomeDesc')}
 
-  // ============================================
-  // NEW CLEAN CHAT LOGIC - COMPLETE REWRITE
-  // ============================================
+## ${t('recruiter.whatICanHelp')}:
 
-  const createWelcomeMessage = (candidateCount: number) => {
-    const welcomeContent = `# ${t('recruiter.newConversationStarted')}
+${t('recruiter.searchCandidates')}
+${t('recruiter.analyzeMatches')}
+${t('recruiter.smartFilters')}
+${t('recruiter.naturalLanguage')}
+
+${candidateCount > 0 
+  ? `\n✅ **${candidateCount} ${t('recruiter.candidatesLoaded')}` 
+  : `\n⚠️ ${t('recruiter.noCandidatesLoaded')}`}
+
+---
+
+${t('recruiter.tryAsking')}`,
+      timestamp: new Date(),
+      usedMistral: true
+    };
+
+    const newChat: Chat = {
+      id: Date.now().toString(),
+      title: t('recruiter.newConversation'),
+      messages: [welcomeMessage],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    setChats([newChat]);
+    setCurrentChatId(newChat.id);
+    setMessages([welcomeMessage]);
+  }, []);
+
+  const createNewChat = () => {
+    const candidateCount = candidates.length;
+    const welcomeMessage: Message = {
+      id: 'welcome-' + Date.now(),
+      role: 'assistant',
+      content: `# ${t('recruiter.newConversationStarted')}
 
 ${t('recruiter.readyToHelp')}
 
@@ -340,184 +348,47 @@ ${candidateCount > 0
   ? `📊 **${candidateCount} ${t('recruiter.candidatesAvailable')}` 
   : `⚠️ ${t('recruiter.uploadCVsToEnable')}`}
 
-${t('recruiter.whatAreYouLookingFor')}`;
-
-    return {
-      id: 'welcome-' + Date.now(),
-      role: 'assistant' as const,
-      content: welcomeContent,
+${t('recruiter.whatAreYouLookingFor')}`,
       timestamp: new Date(),
       usedMistral: true
     };
-  };
-
-  const initializeNewChat = useCallback(async () => {
-    const candidateCount = candidates.length;
-    const welcomeMessage = createWelcomeMessage(candidateCount);
-    const welcomeContent = welcomeMessage.content;
-
-    // Create in MongoDB
-    let newChatId = 'temp-' + Date.now();
-    try {
-      const response = await fetch('/api/save-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: welcomeContent, type: 'bot' })
-      });
-      const data = await response.json();
-      if (data.sessionId) newChatId = data.sessionId;
-    } catch (e) {
-      console.error('Failed to create initial chat:', e);
-    }
 
     const newChat: Chat = {
-      id: newChatId,
+      id: Date.now().toString(),
       title: t('recruiter.newConversation'),
       messages: [welcomeMessage],
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
-    currentChatIdRef.current = newChatId;
-    setChats([newChat]);
-    setCurrentChatId(newChatId);
-    setMessages([welcomeMessage]);
-  }, [candidates.length, t]);
-
-  const createNewChat = async () => {
-    const candidateCount = candidates.length;
-    const welcomeMessage = createWelcomeMessage(candidateCount);
-    const welcomeContent = welcomeMessage.content;
-
-    // Create in MongoDB
-    let newChatId = 'temp-' + Date.now();
-    try {
-      const response = await fetch('/api/save-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: null, message: welcomeContent, type: 'bot' })
-      });
-      const data = await response.json();
-      if (data.sessionId) newChatId = data.sessionId;
-    } catch (e) {
-      console.error('Failed to create chat:', e);
-    }
-
-    const newChat: Chat = {
-      id: newChatId,
-      title: t('recruiter.newConversation'),
-      messages: [welcomeMessage],
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    // SIMPLE: Just set everything for the new chat
-    currentChatIdRef.current = newChatId;
-    setCurrentChatId(newChatId);
-    setMessages([welcomeMessage]);
     setChats(prev => [newChat, ...prev]);
+    setCurrentChatId(newChat.id);
+    setMessages([welcomeMessage]);
   };
 
   const switchChat = (chatId: string) => {
-    // Find the chat
-    const targetChat = chats.find(c => c.id === chatId);
-    if (!targetChat) {
-      console.error('Chat not found:', chatId);
-      return;
-    }
-
-    // Update ref and state
-    currentChatIdRef.current = chatId;
-    setCurrentChatId(chatId);
-    setMessages([...targetChat.messages]);
-  };
-
-  const reloadChatsFromDB = async () => {
-    try {
-      const response = await fetch('/api/get-chats');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.sessions && data.sessions.length > 0) {
-          const loadedChats: Chat[] = [];
-          for (const session of data.sessions.slice(0, 10)) {
-            const sessionResponse = await fetch(`/api/get-chats?sessionId=${session.id}`);
-            if (sessionResponse.ok) {
-              const sessionData = await sessionResponse.json();
-              const chat: Chat = {
-                id: session.id,
-                title: sessionData.session.messages?.[0]?.content?.substring(0, 50) || 'Chat',
-                messages: (sessionData.session.messages || []).map((m: any) => ({
-                  id: m._id || Date.now().toString(),
-                  role: m.type === 'user' ? 'user' : 'assistant',
-                  content: m.content,
-                  timestamp: new Date(m.timestamp),
-                  candidates: m.results || [],
-                  usedMistral: true
-                })),
-                createdAt: new Date(session.created_at),
-                updatedAt: new Date(session.updated_at)
-              };
-              loadedChats.push(chat);
-            }
-          }
-          
-          if (loadedChats.length > 0) {
-            const firstChatId = loadedChats[0].id;
-            currentChatIdRef.current = firstChatId;
-            setChats(loadedChats);
-            setCurrentChatId(firstChatId);
-            setMessages(loadedChats[0].messages);
-          } else {
-            createNewChat();
-          }
-        } else {
-          createNewChat();
-        }
-      }
-    } catch (e) {
-      console.error('Failed to reload chats:', e);
+    const chat = chats.find(c => c.id === chatId);
+    if (chat) {
+      setCurrentChatId(chatId);
+      setMessages(chat.messages.map(m => ({
+        ...m,
+        timestamp: new Date(m.timestamp)
+      })));
     }
   };
 
-  const deleteChat = async (chatId: string, e: React.MouseEvent) => {
+  const deleteChat = (chatId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const updated = chats.filter(c => c.id !== chatId);
+    setChats(updated);
     
-    // Delete from MongoDB FIRST (only if valid MongoDB ID)
-    const isValidMongoId = chatId && chatId.length === 24 && !chatId.startsWith('temp-') && /^[0-9a-fA-F]{24}$/.test(chatId);
-    if (isValidMongoId) {
-      try {
-        const response = await fetch(`/api/delete-chat?sessionId=${chatId}`, { method: 'DELETE' });
-        const result = await response.json();
-        
-        if (response.ok) {
-          console.log('✅ Chat deleted from MongoDB:', chatId);
-          // Reload chats from MongoDB to get fresh state
-          await reloadChatsFromDB();
-          return; // Exit early - reloadChatsFromDB handles state updates
-        } else {
-          console.error('❌ Failed to delete from MongoDB:', result);
-        }
-      } catch (error) {
-        console.error('❌ Error deleting chat:', error);
+    if (currentChatId === chatId) {
+      if (updated.length > 0) {
+        switchChat(updated[0].id);
+      } else {
+        createNewChat();
       }
     }
-    
-    // If not a MongoDB chat or delete failed, just remove from local state
-    const wasActiveChat = chatId === currentChatIdRef.current;
-    
-    setChats(prev => {
-      const updated = prev.filter(c => c.id !== chatId);
-      
-      if (wasActiveChat) {
-        if (updated.length > 0) {
-          switchChat(updated[0].id);
-        } else {
-          createNewChat();
-        }
-      }
-      
-      return updated;
-    });
   };
 
   const stopGeneration = () => {
@@ -529,13 +400,6 @@ ${t('recruiter.whatAreYouLookingFor')}`;
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
-
-    // Use ref to get current chat ID (prevents stale closure)
-    const activeChatId = currentChatIdRef.current || currentChatId;
-    if (!activeChatId) {
-      console.error('No active chat ID');
-      return;
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -550,38 +414,6 @@ ${t('recruiter.whatAreYouLookingFor')}`;
     setIsLoading(true);
 
     abortControllerRef.current = new AbortController();
-
-    // Save user message to MongoDB
-    let sessionId = activeChatId;
-    const isValidMongoId = sessionId && !sessionId.startsWith('temp-') && sessionId.length === 24;
-    
-    try {
-      const saveResponse = await fetch('/api/save-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: isValidMongoId ? sessionId : null,
-          message: input.trim(),
-          type: 'user'
-        })
-      });
-      const saveData = await saveResponse.json();
-      if (saveData.sessionId) {
-        const oldSessionId = sessionId;
-        sessionId = saveData.sessionId;
-        
-        // Update chat ID if it changed
-        if (oldSessionId !== sessionId) {
-          currentChatIdRef.current = sessionId;
-          setCurrentChatId(sessionId);
-          setChats(prev => prev.map(chat => 
-            chat.id === oldSessionId ? { ...chat, id: sessionId! } : chat
-          ));
-        }
-      }
-    } catch (e) {
-      console.error('Failed to save user message to MongoDB:', e);
-    }
 
     try {
       const response = await fetch('/api/recruiter-ai', {
@@ -612,35 +444,16 @@ ${t('recruiter.whatAreYouLookingFor')}`;
       const finalMessages = [...newMessages, assistantMessage];
       setMessages(finalMessages);
 
-      // Save assistant message to MongoDB
-      try {
-        await fetch('/api/save-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: sessionId,
-            message: assistantMessage.content,
-            type: 'bot',
-            results: data.candidates || []
-          })
-        });
-      } catch (e) {
-        console.error('Failed to save assistant message to MongoDB:', e);
-      }
-
-      // Update ONLY the active chat in the chats array
-      const activeId = currentChatIdRef.current || sessionId;
+      // Update chat
       const title = newMessages.length <= 2 
         ? input.trim().substring(0, 35) + (input.length > 35 ? '...' : '')
-        : 'Conversation';
+        : chats.find(c => c.id === currentChatId)?.title || 'Conversation';
 
-      setChats(prev => prev.map(chat => {
-        // Only update if this is the active chat
-        if (chat.id === activeId || chat.id === sessionId) {
-          return { ...chat, id: sessionId, title, messages: finalMessages, updatedAt: new Date() };
-        }
-        return chat; // Don't touch other chats
-      }));
+      setChats(prev => prev.map(chat => 
+        chat.id === currentChatId 
+          ? { ...chat, title, messages: finalMessages, updatedAt: new Date() }
+          : chat
+      ));
 
     } catch (error: any) {
       if (error.name !== 'AbortError') {
