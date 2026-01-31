@@ -9,7 +9,7 @@ https://drive.google.com/file/d/1mMjT2lLqR2NyaKT4EeyLdHJ2lbEJCLZv/view?usp=shari
 
 ## Features
 
-- **AI-Powered CV Parsing**: Extract structured data from CV images/PDFs using Mistral AI
+- **Intelligent CV Parsing**: Extract structured data from CV images/PDFs using OCR Tesseract and Mistral via ollama
 - **Intelligent Ranking**: Score candidates based on experience, skills, projects, and education
 - **Modern Web Interface**: Beautiful Next.js frontend with real-time CV upload and ranking
 - **AI Recruiter Chatbot**: Natural language interface to search and filter candidates
