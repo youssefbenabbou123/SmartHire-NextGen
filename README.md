@@ -4,7 +4,7 @@ An AI-powered CV parsing and candidate ranking system built with Python and Next
 
 ## Video Demo 
 
-on a utilisé drive parce que GitHub limite la taille des fichiers à 25 MB par vidéo et notre video est 600mo :( 
+( on a utilisé drive parce que GitHub limite la taille des fichiers à 25 MB par vidéo et le video est 600mo )  
 https://drive.google.com/file/d/1mMjT2lLqR2NyaKT4EeyLdHJ2lbEJCLZv/view?usp=sharing
 
 ## Features
