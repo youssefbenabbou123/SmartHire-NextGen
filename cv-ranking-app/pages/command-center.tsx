@@ -296,12 +296,12 @@ export default function Home() {
           weights: {},
           candidatesCount: ranked.length,
           rankedCandidates: ranked.slice(0, 10).map((c: any) => ({
-            name: c.name,
+            name: c.candidate_name || c.name || 'Unknown Candidate',
             score: c.total_score || c.score || 0,
             skills: c.skills_matched || []
           })),
           bestCandidate: ranked.length > 0 ? {
-            name: ranked[0].name,
+            name: ranked[0].candidate_name || ranked[0].name || 'Unknown Candidate',
             score: ranked[0].total_score || ranked[0].score || 0
           } : null
         })

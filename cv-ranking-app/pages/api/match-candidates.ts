@@ -205,6 +205,36 @@ function matchSkillWithCosine(requiredSkill: string, candidateSkills: string[]):
   // Ensure candidateSkills is always an array
   const skills = Array.isArray(candidateSkills) ? candidateSkills : [];
   
+  // 0. Handle compound skills with "/" or "&" (e.g., "Git/GitHub", "Agile/Scrum methodology")
+  // Split and check if ANY part matches
+  const compoundParts = requiredSkill.split(/[\/&]/).map(s => s.trim()).filter(s => s.length > 0);
+  if (compoundParts.length > 1) {
+    for (const part of compoundParts) {
+      const partNorm = normalizeSkill(part);
+      const partVariations = getSkillVariations(part);
+      
+      for (const candSkill of skills) {
+        const candNorm = normalizeSkill(candSkill);
+        const candVariations = getSkillVariations(candSkill);
+        
+        // Exact match on part
+        if (partNorm === candNorm) {
+          return { required: requiredSkill, matched: candSkill, matchType: 'exact', similarity: 1.0 };
+        }
+        // Variation match on part
+        if (partVariations.includes(candNorm) || candVariations.includes(partNorm)) {
+          return { required: requiredSkill, matched: candSkill, matchType: 'variation', similarity: 0.95 };
+        }
+        // Part is contained in candidate skill or vice versa (e.g., "agile" in "agile scrum")
+        if (candNorm.includes(partNorm) || partNorm.includes(candNorm)) {
+          if (partNorm.length >= 3 && candNorm.length >= 3) {
+            return { required: requiredSkill, matched: candSkill, matchType: 'variation', similarity: 0.9 };
+          }
+        }
+      }
+    }
+  }
+  
   // 1. Check for exact match
   for (const candSkill of skills) {
     const candNorm = normalizeSkill(candSkill);

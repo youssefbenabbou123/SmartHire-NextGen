@@ -33,7 +33,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       // Get all entries, sorted by newest first
       const entries = await collection.find({}).sort({ createdAt: -1 }).toArray();
-      return res.status(200).json(entries);
+      
+      // Fix candidate names for entries that have raw_data but missing names
+      const fixedEntries = entries.map(entry => {
+        if (entry.rankedCandidates && Array.isArray(entry.rankedCandidates)) {
+          entry.rankedCandidates = entry.rankedCandidates.map((c: any) => {
+            // Try to extract name from various possible sources
+            let name = c.name;
+            if (!name || name === 'Unknown Candidate' || name === 'Unknown') {
+              name = c.candidate_name 
+                || c.raw_data?.personal_info?.full_name
+                || c.raw_data?.name
+                || c.candidateName
+                || 'Unknown Candidate';
+            }
+            return { ...c, name };
+          });
+        }
+        // Also fix bestCandidate
+        if (entry.bestCandidate) {
+          let name = entry.bestCandidate.name;
+          if (!name || name === 'Unknown Candidate' || name === 'Unknown') {
+            const firstCandidate = entry.rankedCandidates?.[0];
+            name = firstCandidate?.name || entry.bestCandidate.candidate_name || 'Unknown Candidate';
+          }
+          entry.bestCandidate = { ...entry.bestCandidate, name };
+        }
+        return entry;
+      });
+      
+      return res.status(200).json(fixedEntries);
     }
 
     // POST - Save a new ranking session

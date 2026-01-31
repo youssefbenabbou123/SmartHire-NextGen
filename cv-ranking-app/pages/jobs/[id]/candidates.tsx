@@ -6,7 +6,7 @@ import Navbar from '../../../components/Navbar';
 import { 
   FiArrowLeft, FiUser, FiCheck, FiX, FiStar, 
   FiZap, FiAward, FiTrendingUp, FiMail, FiMapPin,
-  FiChevronDown, FiChevronUp, FiLoader, FiRefreshCw
+  FiChevronDown, FiChevronUp, FiLoader, FiRefreshCw, FiSave
 } from 'react-icons/fi';
 
 interface Job {
@@ -70,6 +70,10 @@ export default function JobCandidatesPage() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
+  const [editableSkills, setEditableSkills] = useState<string[]>([]);
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [savingSkills, setSavingSkills] = useState(false);
+  const [skillsModified, setSkillsModified] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -85,9 +89,10 @@ export default function JobCandidatesPage() {
       if (!jobRes.ok) throw new Error('Job not found');
       const jobData = await jobRes.json();
       setJob(jobData);
+      setEditableSkills(jobData.skills || []);
 
       // Start matching process
-      await matchCandidates(jobData);
+      await matchCandidates(jobData, jobData.skills || []);
     } catch (error) {
       console.error('Error:', error);
       router.push('/jobs');
@@ -96,8 +101,9 @@ export default function JobCandidatesPage() {
     }
   };
 
-  const matchCandidates = async (jobData: Job) => {
+  const matchCandidates = async (jobData: Job, skills?: string[]) => {
     setMatching(true);
+    const skillsToUse = skills || editableSkills;
 
     try {
       // Call the match-candidates API (uses cosine similarity, no AI)
@@ -106,7 +112,7 @@ export default function JobCandidatesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jobId: jobData._id,
-          requiredSkills: jobData.skills || [],
+          requiredSkills: skillsToUse,
           experienceRequired: jobData.experience,
         }),
       });
@@ -131,7 +137,7 @@ export default function JobCandidatesPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jobTitle: jobData.title,
-            skills: jobData.skills || [],
+            skills: skillsToUse,
             weights: {},
             candidatesCount: data.total,
             rankedCandidates: data.candidates.slice(0, 10).map(c => ({
@@ -151,6 +157,70 @@ export default function JobCandidatesPage() {
       console.error('Matching error:', error);
     } finally {
       setMatching(false);
+    }
+  };
+
+  const removeSkill = (skillToRemove: string) => {
+    setEditableSkills(prev => prev.filter(s => s !== skillToRemove));
+    setSkillsModified(true);
+  };
+
+  const addSkill = () => {
+    const skill = newSkillInput.trim();
+    if (skill && !editableSkills.includes(skill)) {
+      setEditableSkills(prev => [...prev, skill]);
+      setNewSkillInput('');
+      setSkillsModified(true);
+    }
+  };
+
+  const handleSkillKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addSkill();
+    }
+  };
+
+  const rematchWithEditedSkills = () => {
+    if (job) {
+      matchCandidates(job, editableSkills);
+    }
+  };
+
+  const saveSkillsToJob = async () => {
+    if (!job) return;
+    setSavingSkills(true);
+    try {
+      const res = await fetch(`/api/jobs?id=${job._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skills: editableSkills })
+      });
+      if (res.ok) {
+        setJob({ ...job, skills: editableSkills });
+        setSkillsModified(false);
+        // Show success toast
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-20 right-6 glass-panel rounded-xl px-4 py-3 shadow-2xl z-50 animate-fade-in-up';
+        toast.innerHTML = `
+          <div class="flex items-center gap-2 text-green-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span class="text-white">Skills saved to job posting!</span>
+          </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(-10px)';
+          setTimeout(() => toast.remove(), 300);
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Failed to save skills:', error);
+    } finally {
+      setSavingSkills(false);
     }
   };
 
@@ -295,7 +365,7 @@ export default function JobCandidatesPage() {
                 </div>
 
                 <button
-                  onClick={() => job && matchCandidates(job)}
+                  onClick={rematchWithEditedSkills}
                   disabled={matching}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition-all"
                 >
@@ -304,16 +374,62 @@ export default function JobCandidatesPage() {
                 </button>
               </div>
 
-              {/* Required Skills Preview */}
-              {job?.skills && job.skills.length > 0 && (
+              {/* Required Skills - Editable */}
+              {editableSkills.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-white/10">
-                  <span className="text-sm text-gray-400">Required skills ({job.skills.length}): </span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-400">Required skills ({editableSkills.length}): </span>
+                    <div className="flex items-center gap-2">
+                      {skillsModified && (
+                        <span className="text-xs text-yellow-500">Unsaved changes</span>
+                      )}
+                      <span className="text-xs text-gray-500">Click × to remove</span>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {job.skills.map((skill, i) => (
-                      <span key={i} className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-medium">
+                    {editableSkills.map((skill, i) => (
+                      <span 
+                        key={i} 
+                        className="group px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-medium flex items-center gap-1 hover:bg-blue-500/30 transition-colors"
+                      >
                         {skill}
+                        <button
+                          onClick={() => removeSkill(skill)}
+                          className="ml-1 w-4 h-4 rounded-full bg-blue-500/30 hover:bg-red-500/50 flex items-center justify-center text-blue-300 hover:text-red-300 transition-colors"
+                          title="Remove skill"
+                        >
+                          <FiX className="w-3 h-3" />
+                        </button>
                       </span>
                     ))}
+                  </div>
+                  {/* Add new skill input and save button */}
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    <input
+                      type="text"
+                      value={newSkillInput}
+                      onChange={(e) => setNewSkillInput(e.target.value)}
+                      onKeyDown={handleSkillKeyDown}
+                      placeholder="Add a skill..."
+                      className="flex-1 max-w-xs px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={addSkill}
+                      disabled={!newSkillInput.trim()}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Add
+                    </button>
+                    {skillsModified && (
+                      <button
+                        onClick={saveSkillsToJob}
+                        disabled={savingSkills}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <FiSave className="w-4 h-4" />
+                        {savingSkills ? 'Saving...' : 'Save to Job'}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
